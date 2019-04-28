@@ -20,11 +20,16 @@ class MongoStorage(BaseRecommendationStorage):
     manager = MongoStorageManager()
 
     def _get_mock_models(self, spec, collection_name, limit, raw_id, mock_class=MockModel):
-        connection = pymongo.Connection(RECOMMENDS_STORAGE_MONGODB_DATABASE['HOST'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PORT'])
+        connection = pymongo.MongoClient(
+            RECOMMENDS_STORAGE_MONGODB_DATABASE['HOST'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PORT'])
         db = connection[RECOMMENDS_STORAGE_MONGODB_DATABASE['NAME']]
-        collection = db[collection_name]
+        db.authenticate(
+            RECOMMENDS_STORAGE_MONGODB_DATABASE['USERNAME'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PASSWORD'])
 
-        documents = collection.find(spec, limit=limit, sort=[('score', pymongo.DESCENDING)])
+        collection = db[collection_name]
+        
+        documents = collection.find(spec, limit=limit, sort=[
+                                    ('score', pymongo.DESCENDING)])
         if raw_id:
             if mock_class is MockModel:
                 return [{
@@ -40,7 +45,8 @@ class MongoStorage(BaseRecommendationStorage):
 
     def get_similarities_for_object(self, obj, limit=10, raw_id=False):
         object_site_id = self.settings.SITE_ID
-        spec = dict(related_object_site=object_site_id, **self.manager.filter_for_object(obj))
+        spec = dict(related_object_site=object_site_id, **
+                    self.manager.filter_for_object(obj))
         collection_name = RECOMMENDS_STORAGE_MONGODB_SIMILARITY_COLLECTION
 
         return self._get_mock_models(spec, collection_name, limit, raw_id, mock_class=MockSimilarity)
@@ -58,22 +64,30 @@ class MongoStorage(BaseRecommendationStorage):
         pass
 
     def store_similarities(self, itemMatch):
-        connection = pymongo.Connection(RECOMMENDS_STORAGE_MONGODB_DATABASE['HOST'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PORT'])
+        connection = pymongo.MongoClient(
+            RECOMMENDS_STORAGE_MONGODB_DATABASE['HOST'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PORT'])
         db = connection[RECOMMENDS_STORAGE_MONGODB_DATABASE['NAME']]
-        collection = db[RECOMMENDS_STORAGE_MONGODB_SIMILARITY_COLLECTION]
+        db.authenticate(
+            RECOMMENDS_STORAGE_MONGODB_DATABASE['USERNAME'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PASSWORD'])
 
+        collection = db[RECOMMENDS_STORAGE_MONGODB_SIMILARITY_COLLECTION]
+        
         logger.info('saving similarities')
         count = 0
 
         for object_id, scores in itemMatch:
-            object_target, object_target_site = self.resolve_identifier(object_id)
+            object_target, object_target_site = self.resolve_identifier(
+                object_id)
 
             for related_object_id, score in scores:
                 if not math.isnan(score) and score > self.threshold_similarities:
-                    object_related, object_related_site = self.resolve_identifier(related_object_id)
+                    object_related, object_related_site = self.resolve_identifier(
+                        related_object_id)
                     if object_target != object_related:
-                        spec = self.manager.similarity_for_objects(object_target=object_target, object_target_site=object_target_site, object_related=object_related, object_related_site=object_related_site)
-                        collection.update(spec, {'$set': {'score': score}}, upsert=True, fsync=RECOMMENDS_STORAGE_MONGODB_FSYNC)
+                        spec = self.manager.similarity_for_objects(
+                            object_target=object_target, object_target_site=object_target_site, object_related=object_related, object_related_site=object_related_site)
+                        collection.update(spec, {
+                                          '$set': {'score': score}}, upsert=True, fsync=RECOMMENDS_STORAGE_MONGODB_FSYNC)
                         count = count + 1
 
                         if count % RECOMMENDS_STORAGE_LOGGING_THRESHOLD == 0:
@@ -82,10 +96,14 @@ class MongoStorage(BaseRecommendationStorage):
         logger.info('saved %s similarities...' % count)
 
     def store_recommendations(self, recommendations):
-        connection = pymongo.Connection(RECOMMENDS_STORAGE_MONGODB_DATABASE['HOST'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PORT'])
+        connection = pymongo.MongoClient(
+            RECOMMENDS_STORAGE_MONGODB_DATABASE['HOST'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PORT'])
         db = connection[RECOMMENDS_STORAGE_MONGODB_DATABASE['NAME']]
-        collection = db[RECOMMENDS_STORAGE_MONGODB_RECOMMENDATION_COLLECTION]
+        db.authenticate(
+            RECOMMENDS_STORAGE_MONGODB_DATABASE['USERNAME'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PASSWORD'])
 
+        collection = db[RECOMMENDS_STORAGE_MONGODB_RECOMMENDATION_COLLECTION]
+        
         logger.info('saving recommendation')
         count = 0
 
@@ -93,29 +111,41 @@ class MongoStorage(BaseRecommendationStorage):
             for object_id, score in rankings:
                 if not math.isnan(score) and score > self.threshold_recommendations:
                     count = count + 1
-                    object_recommended, site = self.resolve_identifier(object_id)
+                    object_recommended, site = self.resolve_identifier(
+                        object_id)
                     spec = self.manager.suggestion_for_object(
                         user=user,
                         object_recommended=object_recommended,
                         object_site=site
                     )
-                    collection.update(spec, {'$set': {'score': score}}, upsert=True, fsync=RECOMMENDS_STORAGE_MONGODB_FSYNC)
+                    collection.update(spec, {
+                                      '$set': {'score': score}}, upsert=True, fsync=RECOMMENDS_STORAGE_MONGODB_FSYNC)
 
                     if count % RECOMMENDS_STORAGE_LOGGING_THRESHOLD == 0:
                         logger.debug('saved %s recommendations...' % count)
         logger.info('saved %s recommendation...' % count)
 
     def remove_recommendations(self, obj):
-        connection = pymongo.Connection(RECOMMENDS_STORAGE_MONGODB_DATABASE['HOST'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PORT'])
+        connection = pymongo.MongoClient(
+            RECOMMENDS_STORAGE_MONGODB_DATABASE['HOST'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PORT'])
         db = connection[RECOMMENDS_STORAGE_MONGODB_DATABASE['NAME']]
+        db.authenticate(
+            RECOMMENDS_STORAGE_MONGODB_DATABASE['USERNAME'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PASSWORD'])
+
         collection = db[RECOMMENDS_STORAGE_MONGODB_RECOMMENDATION_COLLECTION]
-        collection.remove(self.manager.filter_for_object(obj), fsync=RECOMMENDS_STORAGE_MONGODB_FSYNC)
+
+        collection.remove(self.manager.filter_for_object(
+            obj), fsync=RECOMMENDS_STORAGE_MONGODB_FSYNC)
 
     def remove_similarities(self, obj):
-        connection = pymongo.Connection(RECOMMENDS_STORAGE_MONGODB_DATABASE['HOST'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PORT'])
+        connection = pymongo.MongoClient(
+            RECOMMENDS_STORAGE_MONGODB_DATABASE['HOST'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PORT'])
         db = connection[RECOMMENDS_STORAGE_MONGODB_DATABASE['NAME']]
 
+        db.authenticate(
+            RECOMMENDS_STORAGE_MONGODB_DATABASE['USERNAME'], RECOMMENDS_STORAGE_MONGODB_DATABASE['PASSWORD'])
         collection = db[RECOMMENDS_STORAGE_MONGODB_SIMILARITY_COLLECTION]
-
-        collection.remove(self.manager.filter_for_object(obj), fsync=RECOMMENDS_STORAGE_MONGODB_FSYNC)
-        collection.remove(self.manager.filter_for_related_object(obj), fsync=RECOMMENDS_STORAGE_MONGODB_FSYNC)
+        collection.remove(self.manager.filter_for_object(
+            obj), fsync=RECOMMENDS_STORAGE_MONGODB_FSYNC)
+        collection.remove(self.manager.filter_for_related_object(
+            obj), fsync=RECOMMENDS_STORAGE_MONGODB_FSYNC)
